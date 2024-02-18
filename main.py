@@ -1,9 +1,19 @@
 #!/usr/bin/env python
 import logging
+import re
 from telegram import ForceReply, Update
 from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
 import gspread_asyncio
 from google.oauth2.service_account import Credentials
+
+
+def find_urls(text):
+    # Regular expression for matching URLs
+    url_pattern = r'(https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|www\.[a-zA-Z0-9][a-zA-Z0-9-]+[a-zA-Z0-9]\.[^\s]{2,}|https?:\/\/(?:www\.|(?!www))[a-zA-Z0-9]+\.[^\s]{2,}|www\.[a-zA-Z0-9]+\.[^\s]{2,})'
+    # Find all matches in the text
+    urls = re.findall(url_pattern, text)
+    # Return the URLs separated by whitespace
+    return '\n'.join(urls)
 
 
 async def add_row_async(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -18,9 +28,11 @@ async def add_row_async(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     sheet = await spreadsheet.get_worksheet(0)
 
     # Add a new line
-    row = [None, None, None, None, None, None, None, None, None, None, None, update.message.text]
+    message = update.message.text
+    links = find_urls(message)
+    row = [None, None, None, None, None, None, None, None, None, None, links, message]
     await sheet.append_row(row)
-    print(f"Message {update.message.text} added to the table.")
+    print(f"Message {message} added to the table.")
     # await update.message.reply_text(update.message.text)
     await update.message.reply_text("Запись успешно добавлена.")
 
