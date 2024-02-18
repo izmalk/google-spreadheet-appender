@@ -1,19 +1,82 @@
-import gspread
+#!/usr/bin/env python
+import logging
+from telegram import ForceReply, Update
+from telegram.ext import Application, CommandHandler, ContextTypes, MessageHandler, filters
+import gspread_asyncio
 from google.oauth2.service_account import Credentials
-from gspread.utils import ValueRenderOption
 
-# Set up the credentials
-scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
-creds = Credentials.from_service_account_file('/Users/izmalk/Library/CloudStorage/Dropbox/spreadsheeter/smart-idiom-414523-5d2f119bbbdd.json', scopes=scope)
-client = gspread.authorize(creds)
 
-print(client.list_spreadsheet_files())
-# Open the spreadsheet
-spreadsheet = client.open('TW_searching_2024').sheet1  # Use the actual name of your spreadsheet
+async def add_row_async(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    # Set up the credentials
+    scope = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
+    creds = Credentials.from_service_account_file('google-api-token.json', scopes=scope)
 
-# Add a new line
-row = [None, spreadsheet.get('B1', value_render_option=ValueRenderOption.unformatted).first(),
-       None, None, None, None, None, None, None, None, "Link4", "Comments4"]  # Example row data you want to add
-spreadsheet.append_row(row)  # Adds a new row with your data
+    agcm = gspread_asyncio.AsyncioGspreadClientManager(lambda: creds)
+    agc = await agcm.authorize()
+    # Open the spreadsheet
+    spreadsheet = await agc.open('TW_searching_2024')
+    sheet = await spreadsheet.get_worksheet(0)
 
-print("Finished.")
+    # Add a new line
+    row = [None, None, None, None, None, None, None, None, None, None, None, update.message.text]
+    await sheet.append_row(row)
+    print(f"Message {update.message.text} added to the table.")
+    # await update.message.reply_text(update.message.text)
+    await update.message.reply_text("Запись успешно добавлена.")
+
+
+# Enable logging
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+# set higher logging level for httpx to avoid all GET and POST requests being logged
+logging.getLogger("httpx").setLevel(logging.ERROR)
+
+logger = logging.getLogger(__name__)
+
+
+# Define a few command handlers. These usually take the two arguments update and context.
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send a message when the command /start is issued."""
+    user = update.effective_user
+    await update.message.reply_html(
+        rf"Hi {user.mention_html()}!",
+        reply_markup=ForceReply(selective=True),
+    )
+
+
+async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Send a message when the command /help is issued."""
+    await update.message.reply_text("Every message is added in a Comments column on a new row.")
+
+
+async def echo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Echo the user message."""
+    print(update.message.text)
+    await update.message.reply_text(update.message.text)
+
+
+def main() -> None:
+    """Start the bot."""
+    # Read token to access the bot
+    with open("bot-token.txt", "r") as file:
+        API_TOKEN = file.read()
+
+    # Create the Application and pass it your bot's token.
+    application = Application.builder().token(API_TOKEN).build()
+
+    # on different commands - answer in Telegram
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+
+    # on non command i.e message - echo the message on Telegram
+    # application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, echo))
+    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, add_row_async))
+    # application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, print_msg()))
+
+    # Run the bot until the user presses Ctrl-C
+    application.run_polling(allowed_updates=Update.ALL_TYPES)
+
+
+if __name__ == "__main__":
+    main()
